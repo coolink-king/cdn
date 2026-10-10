@@ -1,0 +1,41 @@
+feeds:
+  - name: Hacker News 首页
+    url: https://hnrss.org/frontpage
+    keywords: [Rust, PostgreSQL, "security advisory", CVE]
+
+  - name: 阮一峰科技周刊
+    url: https://feeds.feedburner.com/ruanyifeng
+    keywords: [开源, AI, 免费]
+    exclude_keywords: [招聘, 内推]
+
+  - name: V2EX 程序员
+    url: https://www.v2ex.com/feed/tab/programming.xml
+    keywords: [RSS, 爬虫, 自动部署]
+    match_in: [title]          # 只匹配标题，正文太长容易误命中
+    case_sensitive: false
+
+webhook:
+  url: https://example.com/hooks/rss        # 换成你的接收地址
+  method: POST
+  headers: {}                               # 需要鉴权时填，例如 Authorization: "Bearer xxx"
+  timeout: 10
+  retries: 3
+  payload:
+    title_field: title                      # JSON 里标题用的字段名
+    text_field: content                     # JSON 里正文用的字段名
+    extra:                                  # 固定附加到每条消息的字段
+      source: rss-monitor
+      level: info
+
+defaults:
+  keywords: [AI, LLM]                       # 源里没写 keywords 时回落到这里
+  exclude_keywords: []
+  match_in: [title, summary]
+  case_sensitive: false
+
+poll_interval: 300                          # 轮询间隔（秒）
+notify_on_first_run: false                  # false = 首次接入只建基线不推送
+state_file: state.json
+request_timeout: 20
+user_agent: rss-monitor/1.0
+log_level: INFO
