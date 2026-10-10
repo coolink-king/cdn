@@ -22,6 +22,7 @@ log = logging.getLogger("rss-monitor")
 
 STOP = False
 MAX_SEEN_PER_FEED = 1000
+MAX_NOTIFY_PER_FEED = 20
 
 
 def _handle_stop(signum, frame):
@@ -80,11 +81,17 @@ def load_state(path: Path) -> dict:
         return {}
 
 
-def save_state(path: Path, state: dict) -> None:
+def save_state(path: Path, state: dict) -> bool:
     tmp = path.with_name(path.name + ".tmp")
-    with tmp.open("w", encoding="utf-8") as fh:
-        json.dump(state, fh, ensure_ascii=False, indent=2)
-    os.replace(tmp, path)
+    try:
+        with tmp.open("w", encoding="utf-8") as fh:
+            json.dump(state, fh, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+        return True
+    except OSError as exc:
+        # 状态写不进去只影响去重（重启后可能重复通知），不值得让常驻进程退出
+        log.error("状态文件 %s 写入失败: %s", path, exc)
+        return False
 
 
 def entry_key(entry: dict, feed_url: str) -> str:
@@ -113,15 +120,15 @@ def match_keywords(text: str, feed: dict, defaults: dict) -> tuple[bool, list[st
     haystack = text if case_sensitive else text.lower()
 
     for word in feed.get("exclude_keywords") or []:
-        needle = word if case_sensitive else word.lower()
+        needle = str(word) if case_sensitive else str(word).lower()
         if needle in haystack:
             return False, []
 
     hit = []
     for word in feed.get("keywords") or []:
-        needle = word if case_sensitive else word.lower()
+        needle = str(word) if case_sensitive else str(word).lower()
         if needle in haystack:
-            hit.append(word)
+            hit.append(str(word))
     return bool(hit), hit
 
 
@@ -232,7 +239,13 @@ def check_feed(session: requests.Session, feed: dict, cfg: dict, state: dict, st
         return 0
 
     notified = 0
+    cap = int(cfg.get("max_notify_per_feed", MAX_NOTIFY_PER_FEED))
     for entry in reversed(fresh):
+        if notified >= cap:
+            # 未处理的条目不写入状态，下一轮继续判定，避免一次性打爆 webhook
+            log.warning("%s：本轮已达 %d 条上限，其余留到下一轮", feed["name"], cap)
+            break
+
         key = entry_key(entry, url)
         seen_list.append(key)
         seen.add(key)

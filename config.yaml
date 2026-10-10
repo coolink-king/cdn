@@ -34,7 +34,8 @@ defaults:
   case_sensitive: false
 
 poll_interval: 300                          # 轮询间隔（秒）
-notify_on_first_run: false                  # false = 首次接入只建基线不推送
+max_notify_per_feed: 20                     # 每个源每轮最多推送条数，防止打爆 webhook 限流
+notify_on_first_run: false                  # false = 首次接入只记录基线不推送
 state_file: state.json
 request_timeout: 20
 user_agent: rss-monitor/1.0
