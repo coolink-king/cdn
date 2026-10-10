@@ -25,6 +25,7 @@ python -m pip install -r requirements.txt
 | `webhook.headers` | 需要鉴权时加请求头，例如 `Authorization: "Bearer xxx"` |
 | `webhook.payload` | JSON 载荷的字段名映射，见下 |
 | `poll_interval` | 轮询间隔秒数，默认 300 |
+| `max_notify_per_feed` | 每个源每轮最多成功推送条数，默认 20；超出的留到下一轮，避免触发机器人限流 |
 | `notify_on_first_run` | 默认 `false`：新接入的源只记录历史条目做基线，不一次性刷屏 |
 
 `webhook.payload` 决定发出的 JSON 长什么样。默认配置下：
