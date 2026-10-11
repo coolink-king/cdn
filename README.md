@@ -22,11 +22,17 @@ python -m pip install -r requirements.txt
 | `feeds[].match_in` | 在哪些字段里找关键词，可选 `title` / `summary` / `content` |
 | `feeds[].case_sensitive` | 默认 `false`，中英文都按子串匹配 |
 | `webhook.url` | 接收通知的地址 |
+| `webhook.method` | 默认 `POST` |
 | `webhook.headers` | 需要鉴权时加请求头，例如 `Authorization: "Bearer xxx"` |
+| `webhook.timeout` / `retries` | 单次请求超时秒数（默认 10）与重试次数（默认 3，最小 1） |
 | `webhook.payload` | JSON 载荷的字段名映射，见下 |
-| `poll_interval` | 轮询间隔秒数，默认 300 |
-| `max_notify_per_feed` | 每个源每轮最多成功推送条数，默认 20；超出的留到下一轮，避免触发机器人限流 |
+| `poll_interval` | 轮询间隔秒数，默认 300，下限 30（配更小会按下限跑，避免空转打满 CPU） |
+| `max_notify_per_feed` | 每个源每轮最多**成功**推送条数，默认 20；超出的留到下一轮，避免触发机器人限流 |
 | `notify_on_first_run` | 默认 `false`：新接入的源只记录历史条目做基线，不一次性刷屏 |
+| `request_timeout` / `user_agent` | 抓取 RSS 的超时秒数（默认 20）与 User-Agent |
+| `state_file` / `log_level` | 状态文件路径（相对配置文件目录）与日志级别，默认 `INFO` |
+
+`keywords` 写成单个字符串（`keywords: Rust`）也可以，程序会自动当成一项；写成列表更符合直觉。类型不对的配置（`webhook.headers` 写成字符串、`poll_interval` 写成 `"20s"` 等）会在启动时报明确错误或直接回落到默认值，不会跑到一半才崩。
 
 `webhook.payload` 决定发出的 JSON 长什么样。默认配置下：
 
@@ -53,7 +59,15 @@ python rss_monitor.py --config prod.yaml # 指定配置文件
 
 ## 去重与状态
 
-已推送条目的标识记在 `state.json`（与配置文件同目录），重启后不会重复通知，每个源最多保留 1000 条记录。删除该文件等于全部重新判定。推送失败的条目不会写入状态，下一轮自动重试。
+已推送条目的标识记在 `state.json`（相对配置文件目录），重启后不会重复通知，每个源最多保留 1000 条记录。删除该文件等于全部重新判定。
+
+条目只有在 webhook **返回成功后**才写入状态，所以推送失败的条目下一轮会自动重试。反过来，进程被强杀时可能重试已发过的通知 —— 这是「至少送达一次」的取舍。`state.json` 写入失败（Windows 上文件被其他程序占用）只记录错误、不会让进程退出，代价同样是重启后可能重复通知。
+
+## 退出与可靠性
+
+`Ctrl+C` 在 Windows 和 Linux 上都能优雅退出（本轮跑完再停）；关闭窗口在 Windows 上会走 `SIGBREAK`，同样优雅；Linux 下 `kill` 发 `SIGTERM` 也走同一处理。单个源返回畸形 XML 或解析异常时只跳过该源，不会终止常驻进程。
+
+webhook 返回 3xx 一律按失败处理（不跟随重定向）。地址被重定向到登录页时，跟随后拿到的 200 是假成功，通知其实没送到，所以宁可报错也不要静默吞掉。
 
 ## 换成别的推送渠道
 
